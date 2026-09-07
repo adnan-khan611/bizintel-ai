@@ -14,6 +14,27 @@ DATASET_FILES = {
 }
 
 
+def print_validation_result(result) -> None:
+    """Print validation errors and warnings."""
+    if result.is_valid:
+        print("Status: VALID")
+    else:
+        print("Status: INVALID")
+
+    if result.errors:
+        print("\nErrors:")
+        for error in result.errors:
+            print(f"- {error}")
+
+    if result.warnings:
+        print("\nWarnings:")
+        for warning in result.warnings:
+            print(f"- {warning}")
+
+    if not result.errors and not result.warnings:
+        print("No validation issues found.")
+
+
 def main() -> None:
     """Validate the core Olist datasets."""
     for dataset_name, filename in DATASET_FILES.items():
@@ -26,13 +47,7 @@ def main() -> None:
         dataframe = read_csv_file(file_path)
         result = validate_dataset(dataframe, dataset_name)
 
-        if result.is_valid:
-            print("Status: VALID")
-        else:
-            print("Status: INVALID")
-
-            for error in result.errors:
-                print(f"- {error}")
+        print_validation_result(result)
 
 
 if __name__ == "__main__":
