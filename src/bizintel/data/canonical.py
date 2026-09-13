@@ -7,7 +7,6 @@ def build_canonical_customers(
     customers: pd.DataFrame,
 ) -> pd.DataFrame:
     """Transform raw Olist customers into canonical customers."""
-
     required_columns = [
         "customer_id",
         "customer_unique_id",
@@ -54,11 +53,12 @@ def build_canonical_customers(
     ).reset_index(drop=True)
 
     return canonical
+
+
 def build_canonical_products(
     products: pd.DataFrame,
 ) -> pd.DataFrame:
     """Transform raw Olist products into canonical products."""
-
     required_columns = [
         "product_id",
         "product_category_name",
@@ -112,3 +112,106 @@ def build_canonical_products(
         )
 
     return canonical
+
+
+def build_canonical_orders(
+    orders_dataframe: pd.DataFrame,
+    customers_dataframe: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build the canonical orders dataset."""
+    required_order_columns = [
+        "order_id",
+        "customer_id",
+        "order_status",
+        "order_purchase_timestamp",
+        "order_approved_at",
+        "order_delivered_carrier_date",
+        "order_delivered_customer_date",
+        "order_estimated_delivery_date",
+    ]
+
+    required_customer_columns = [
+        "customer_id",
+        "customer_unique_id",
+    ]
+
+    missing_order_columns = [
+        column
+        for column in required_order_columns
+        if column not in orders_dataframe.columns
+    ]
+
+    if missing_order_columns:
+        raise ValueError(
+            "Missing required order columns: "
+            f"{missing_order_columns}"
+        )
+
+    missing_customer_columns = [
+        column
+        for column in required_customer_columns
+        if column not in customers_dataframe.columns
+    ]
+
+    if missing_customer_columns:
+        raise ValueError(
+            "Missing required customer columns: "
+            f"{missing_customer_columns}"
+        )
+
+    if orders_dataframe["order_id"].duplicated().any():
+        raise ValueError("Duplicate order_id values found.")
+
+    customer_mapping = customers_dataframe[
+        ["customer_id", "customer_unique_id"]
+    ].copy()
+
+    if customer_mapping["customer_id"].duplicated().any():
+        raise ValueError(
+            "Duplicate customer_id values found in customer mapping."
+        )
+
+    customer_mapping = customer_mapping.set_index("customer_id")[
+        "customer_unique_id"
+    ]
+
+    canonical_customer_ids = orders_dataframe["customer_id"].map(
+        customer_mapping
+    )
+
+    if canonical_customer_ids.isna().any():
+        missing_count = int(canonical_customer_ids.isna().sum())
+        raise ValueError(
+            "Found "
+            f"{missing_count:,} orders with unmapped customer_id values."
+        )
+
+    canonical_orders = pd.DataFrame(
+        {
+            "order_id": orders_dataframe["order_id"].copy(),
+            "customer_id": canonical_customer_ids,
+            "order_status": orders_dataframe["order_status"].copy(),
+            "order_date": pd.to_datetime(
+                orders_dataframe["order_purchase_timestamp"],
+                errors="coerce",
+            ),
+            "order_approved_at": pd.to_datetime(
+                orders_dataframe["order_approved_at"],
+                errors="coerce",
+            ),
+            "order_delivered_carrier_at": pd.to_datetime(
+                orders_dataframe["order_delivered_carrier_date"],
+                errors="coerce",
+            ),
+            "order_delivered_customer_at": pd.to_datetime(
+                orders_dataframe["order_delivered_customer_date"],
+                errors="coerce",
+            ),
+            "order_estimated_delivery_at": pd.to_datetime(
+                orders_dataframe["order_estimated_delivery_date"],
+                errors="coerce",
+            ),
+        }
+    )
+
+    return canonical_orders

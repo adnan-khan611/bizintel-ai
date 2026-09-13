@@ -3,10 +3,15 @@
 import pandas as pd
 import pytest
 
-from bizintel.data.canonical import build_canonical_customers, build_canonical_products
+from bizintel.data.canonical import (
+    build_canonical_customers,
+    build_canonical_orders,
+    build_canonical_products,
+)
 
 
 def test_build_canonical_customers_maps_columns_correctly():
+    """Test customer columns map correctly."""
     raw = pd.DataFrame(
         {
             "customer_id": ["source-1", "source-2"],
@@ -33,6 +38,7 @@ def test_build_canonical_customers_maps_columns_correctly():
 
 
 def test_build_canonical_customers_deduplicates_customer_identity():
+    """Test duplicate customer identities are deduplicated."""
     raw = pd.DataFrame(
         {
             "customer_id": [
@@ -76,6 +82,7 @@ def test_build_canonical_customers_deduplicates_customer_identity():
 
 
 def test_build_canonical_customers_keeps_first_record_deterministically():
+    """Test first duplicate customer record is retained."""
     raw = pd.DataFrame(
         {
             "customer_id": ["source-1", "source-2"],
@@ -96,6 +103,7 @@ def test_build_canonical_customers_keeps_first_record_deterministically():
 
 
 def test_build_canonical_customers_does_not_modify_input():
+    """Test customer input is not modified."""
     raw = pd.DataFrame(
         {
             "customer_id": ["source-1"],
@@ -106,7 +114,7 @@ def test_build_canonical_customers_does_not_modify_input():
         }
     )
 
-    original = raw.copy()
+    original = raw.copy(deep=True)
 
     build_canonical_customers(raw)
 
@@ -114,6 +122,7 @@ def test_build_canonical_customers_does_not_modify_input():
 
 
 def test_build_canonical_customers_missing_column_raises_error():
+    """Test missing customer columns raise an error."""
     raw = pd.DataFrame(
         {
             "customer_id": ["source-1"],
@@ -131,6 +140,7 @@ def test_build_canonical_customers_missing_column_raises_error():
 
 
 def test_build_canonical_customers_missing_customer_id_raises_error():
+    """Test missing canonical customer ID raises an error."""
     raw = pd.DataFrame(
         {
             "customer_id": ["source-1"],
@@ -146,7 +156,10 @@ def test_build_canonical_customers_missing_customer_id_raises_error():
         match="Canonical customer_id cannot contain missing values",
     ):
         build_canonical_customers(raw)
+
+
 def test_build_canonical_products_maps_columns_correctly():
+    """Test product columns map correctly."""
     raw = pd.DataFrame(
         {
             "product_id": ["product-1", "product-2"],
@@ -182,6 +195,7 @@ def test_build_canonical_products_maps_columns_correctly():
 
 
 def test_build_canonical_products_converts_nullable_integer_columns():
+    """Test nullable product integer columns use Int64."""
     raw = pd.DataFrame(
         {
             "product_id": ["product-1"],
@@ -204,6 +218,7 @@ def test_build_canonical_products_converts_nullable_integer_columns():
 
 
 def test_build_canonical_products_preserves_missing_values():
+    """Test missing product values remain missing."""
     raw = pd.DataFrame(
         {
             "product_id": ["product-1"],
@@ -231,6 +246,7 @@ def test_build_canonical_products_preserves_missing_values():
 
 
 def test_build_canonical_products_rejects_duplicate_product_id():
+    """Test duplicate product IDs are rejected."""
     raw = pd.DataFrame(
         {
             "product_id": ["product-1", "product-1"],
@@ -250,3 +266,257 @@ def test_build_canonical_products_rejects_duplicate_product_id():
         match="Canonical product_id must be unique",
     ):
         build_canonical_products(raw)
+
+
+def test_build_canonical_orders_maps_columns():
+    """Test canonical order columns and basic field mapping."""
+    orders = pd.DataFrame(
+        {
+            "order_id": ["order_1"],
+            "customer_id": ["raw_customer_1"],
+            "order_status": ["delivered"],
+            "order_purchase_timestamp": ["2018-01-01 10:00:00"],
+            "order_approved_at": ["2018-01-01 10:05:00"],
+            "order_delivered_carrier_date": ["2018-01-02 09:00:00"],
+            "order_delivered_customer_date": ["2018-01-05 12:00:00"],
+            "order_estimated_delivery_date": ["2018-01-10"],
+        }
+    )
+
+    customers = pd.DataFrame(
+        {
+            "customer_id": ["raw_customer_1"],
+            "customer_unique_id": ["unique_customer_1"],
+        }
+    )
+
+    result = build_canonical_orders(orders, customers)
+
+    assert list(result.columns) == [
+        "order_id",
+        "customer_id",
+        "order_status",
+        "order_date",
+        "order_approved_at",
+        "order_delivered_carrier_at",
+        "order_delivered_customer_at",
+        "order_estimated_delivery_at",
+    ]
+
+    assert result.loc[0, "order_id"] == "order_1"
+    assert result.loc[0, "customer_id"] == "unique_customer_1"
+    assert result.loc[0, "order_status"] == "delivered"
+
+
+def test_build_canonical_orders_maps_customer_unique_id():
+    """Test raw customer IDs map to canonical customer IDs."""
+    orders = pd.DataFrame(
+        {
+            "order_id": ["order_1"],
+            "customer_id": ["raw_customer_1"],
+            "order_status": ["shipped"],
+            "order_purchase_timestamp": ["2018-01-01 10:00:00"],
+            "order_approved_at": ["2018-01-01 10:05:00"],
+            "order_delivered_carrier_date": [None],
+            "order_delivered_customer_date": [None],
+            "order_estimated_delivery_date": ["2018-01-10"],
+        }
+    )
+
+    customers = pd.DataFrame(
+        {
+            "customer_id": ["raw_customer_1"],
+            "customer_unique_id": ["unique_customer_abc"],
+        }
+    )
+
+    result = build_canonical_orders(orders, customers)
+
+    assert result.loc[0, "customer_id"] == "unique_customer_abc"
+
+
+def test_build_canonical_orders_converts_dates():
+    """Test order date columns are converted to datetime."""
+    orders = pd.DataFrame(
+        {
+            "order_id": ["order_1"],
+            "customer_id": ["raw_customer_1"],
+            "order_status": ["delivered"],
+            "order_purchase_timestamp": ["2018-01-01 10:00:00"],
+            "order_approved_at": ["2018-01-01 10:05:00"],
+            "order_delivered_carrier_date": ["2018-01-02 09:00:00"],
+            "order_delivered_customer_date": ["2018-01-05 12:00:00"],
+            "order_estimated_delivery_date": ["2018-01-10"],
+        }
+    )
+
+    customers = pd.DataFrame(
+        {
+            "customer_id": ["raw_customer_1"],
+            "customer_unique_id": ["unique_customer_1"],
+        }
+    )
+
+    result = build_canonical_orders(orders, customers)
+
+    date_columns = [
+        "order_date",
+        "order_approved_at",
+        "order_delivered_carrier_at",
+        "order_delivered_customer_at",
+        "order_estimated_delivery_at",
+    ]
+
+    for column in date_columns:
+        assert pd.api.types.is_datetime64_any_dtype(result[column])
+
+
+def test_build_canonical_orders_preserves_missing_dates():
+    """Test missing lifecycle dates remain missing."""
+    orders = pd.DataFrame(
+        {
+            "order_id": ["order_1"],
+            "customer_id": ["raw_customer_1"],
+            "order_status": ["processing"],
+            "order_purchase_timestamp": ["2018-01-01 10:00:00"],
+            "order_approved_at": [None],
+            "order_delivered_carrier_date": [None],
+            "order_delivered_customer_date": [None],
+            "order_estimated_delivery_date": ["2018-01-10"],
+        }
+    )
+
+    customers = pd.DataFrame(
+        {
+            "customer_id": ["raw_customer_1"],
+            "customer_unique_id": ["unique_customer_1"],
+        }
+    )
+
+    result = build_canonical_orders(orders, customers)
+
+    assert pd.isna(result.loc[0, "order_approved_at"])
+    assert pd.isna(result.loc[0, "order_delivered_carrier_at"])
+    assert pd.isna(result.loc[0, "order_delivered_customer_at"])
+
+
+def test_build_canonical_orders_rejects_duplicate_order_id():
+    """Test duplicate order IDs are rejected."""
+    orders = pd.DataFrame(
+        {
+            "order_id": ["order_1", "order_1"],
+            "customer_id": ["raw_customer_1", "raw_customer_1"],
+            "order_status": ["delivered", "delivered"],
+            "order_purchase_timestamp": [
+                "2018-01-01 10:00:00",
+                "2018-01-01 11:00:00",
+            ],
+            "order_approved_at": [None, None],
+            "order_delivered_carrier_date": [None, None],
+            "order_delivered_customer_date": [None, None],
+            "order_estimated_delivery_date": [
+                "2018-01-10",
+                "2018-01-10",
+            ],
+        }
+    )
+
+    customers = pd.DataFrame(
+        {
+            "customer_id": ["raw_customer_1"],
+            "customer_unique_id": ["unique_customer_1"],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Duplicate order_id",
+    ):
+        build_canonical_orders(orders, customers)
+
+
+def test_build_canonical_orders_rejects_unmapped_customer():
+    """Test unknown customer IDs are rejected."""
+    orders = pd.DataFrame(
+        {
+            "order_id": ["order_1"],
+            "customer_id": ["unknown_customer"],
+            "order_status": ["delivered"],
+            "order_purchase_timestamp": ["2018-01-01 10:00:00"],
+            "order_approved_at": [None],
+            "order_delivered_carrier_date": [None],
+            "order_delivered_customer_date": [None],
+            "order_estimated_delivery_date": [
+                "2018-01-10",
+            ],
+        }
+    )
+
+    customers = pd.DataFrame(
+        {
+            "customer_id": ["raw_customer_1"],
+            "customer_unique_id": ["unique_customer_1"],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="unmapped customer_id",
+    ):
+        build_canonical_orders(orders, customers)
+
+
+def test_build_canonical_orders_rejects_missing_order_columns():
+    """Test missing required order columns are rejected."""
+    orders = pd.DataFrame(
+        {
+            "order_id": ["order_1"],
+            "customer_id": ["raw_customer_1"],
+        }
+    )
+
+    customers = pd.DataFrame(
+        {
+            "customer_id": ["raw_customer_1"],
+            "customer_unique_id": ["unique_customer_1"],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Missing required order columns",
+    ):
+        build_canonical_orders(orders, customers)
+
+
+def test_build_canonical_orders_does_not_modify_input():
+    """Test source DataFrames remain unchanged."""
+    orders = pd.DataFrame(
+        {
+            "order_id": ["order_1"],
+            "customer_id": ["raw_customer_1"],
+            "order_status": ["delivered"],
+            "order_purchase_timestamp": ["2018-01-01 10:00:00"],
+            "order_approved_at": [None],
+            "order_delivered_carrier_date": [None],
+            "order_delivered_customer_date": [None],
+            "order_estimated_delivery_date": [
+                "2018-01-10",
+            ],
+        }
+    )
+
+    customers = pd.DataFrame(
+        {
+            "customer_id": ["raw_customer_1"],
+            "customer_unique_id": ["unique_customer_1"],
+        }
+    )
+
+    orders_before = orders.copy(deep=True)
+    customers_before = customers.copy(deep=True)
+
+    build_canonical_orders(orders, customers)
+
+    pd.testing.assert_frame_equal(orders, orders_before)
+    pd.testing.assert_frame_equal(customers, customers_before)
