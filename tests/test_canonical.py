@@ -1,10 +1,10 @@
 """Tests for canonical dataset transformations."""
-
 import pandas as pd
 import pytest
 
 from bizintel.data.canonical import (
     build_canonical_customers,
+    build_canonical_order_items,
     build_canonical_orders,
     build_canonical_products,
 )
@@ -520,3 +520,135 @@ def test_build_canonical_orders_does_not_modify_input():
 
     pd.testing.assert_frame_equal(orders, orders_before)
     pd.testing.assert_frame_equal(customers, customers_before)
+    
+def test_build_canonical_order_items_maps_columns() -> None:
+    """Test canonical order item columns."""
+    dataframe = pd.DataFrame(
+        {
+            "order_id": ["order-1"],
+            "order_item_id": [1],
+            "product_id": ["product-1"],
+            "seller_id": ["seller-1"],
+            "shipping_limit_date": ["2018-01-02 10:30:00"],
+            "price": [58.90],
+            "freight_value": [13.29],
+        }
+    )
+
+    result = build_canonical_order_items(dataframe)
+
+    assert list(result.columns) == [
+        "order_id",
+        "order_item_id",
+        "product_id",
+        "seller_id",
+        "shipping_limit_at",
+        "price_minor",
+        "freight_value_minor",
+    ]
+
+
+def test_build_canonical_order_items_converts_dates() -> None:
+    """Test shipping limit date conversion."""
+    dataframe = pd.DataFrame(
+        {
+            "order_id": ["order-1"],
+            "order_item_id": [1],
+            "product_id": ["product-1"],
+            "seller_id": ["seller-1"],
+            "shipping_limit_date": ["2018-01-02 10:30:00"],
+            "price": [58.90],
+            "freight_value": [13.29],
+        }
+    )
+
+    result = build_canonical_order_items(dataframe)
+
+    assert pd.api.types.is_datetime64_any_dtype(
+        result["shipping_limit_at"]
+    )
+
+
+def test_build_canonical_order_items_converts_money_to_minor_units() -> None:
+    """Test monetary values are converted to minor units."""
+    dataframe = pd.DataFrame(
+        {
+            "order_id": ["order-1"],
+            "order_item_id": [1],
+            "product_id": ["product-1"],
+            "seller_id": ["seller-1"],
+            "shipping_limit_date": ["2018-01-02 10:30:00"],
+            "price": [58.90],
+            "freight_value": [13.29],
+        }
+    )
+
+    result = build_canonical_order_items(dataframe)
+
+    assert result["price_minor"].iloc[0] == 5890
+    assert result["freight_value_minor"].iloc[0] == 1329
+
+
+def test_build_canonical_order_items_rejects_duplicate_key() -> None:
+    """Test duplicate order item keys are rejected."""
+    dataframe = pd.DataFrame(
+        {
+            "order_id": ["order-1", "order-1"],
+            "order_item_id": [1, 1],
+            "product_id": ["product-1", "product-1"],
+            "seller_id": ["seller-1", "seller-1"],
+            "shipping_limit_date": [
+                "2018-01-02 10:30:00",
+                "2018-01-02 10:30:00",
+            ],
+            "price": [58.90, 58.90],
+            "freight_value": [13.29, 13.29],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Duplicate order_id \\+ order_item_id combinations found",
+    ):
+        build_canonical_order_items(dataframe)
+
+
+def test_build_canonical_order_items_missing_column_raises_error() -> None:
+    """Test missing required column."""
+    dataframe = pd.DataFrame(
+        {
+            "order_id": ["order-1"],
+            "order_item_id": [1],
+            "product_id": ["product-1"],
+            "seller_id": ["seller-1"],
+            "shipping_limit_date": ["2018-01-02 10:30:00"],
+            "price": [58.90],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Missing required order item columns",
+    ):
+        build_canonical_order_items(dataframe)
+
+
+def test_build_canonical_order_items_does_not_modify_input() -> None:
+    """Test input DataFrame remains unchanged."""
+    dataframe = pd.DataFrame(
+        {
+            "order_id": ["order-1"],
+            "order_item_id": [1],
+            "product_id": ["product-1"],
+            "seller_id": ["seller-1"],
+            "shipping_limit_date": ["2018-01-02 10:30:00"],
+            "price": [58.90],
+            "freight_value": [13.29],
+        }
+    )
+
+    original = dataframe.copy(deep=True)
+
+    build_canonical_order_items(dataframe)
+
+    pd.testing.assert_frame_equal(dataframe, original)

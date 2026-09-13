@@ -2,6 +2,8 @@
 
 import pandas as pd
 
+from bizintel.data.money import convert_to_minor_units
+
 
 def build_canonical_customers(
     customers: pd.DataFrame,
@@ -215,3 +217,59 @@ def build_canonical_orders(
     )
 
     return canonical_orders
+
+def build_canonical_order_items(
+    order_items_dataframe: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build the canonical order items dataset."""
+    required_columns = [
+        "order_id",
+        "order_item_id",
+        "product_id",
+        "seller_id",
+        "shipping_limit_date",
+        "price",
+        "freight_value",
+    ]
+
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in order_items_dataframe.columns
+    ]
+
+    if missing_columns:
+        raise ValueError(
+            "Missing required order item columns: "
+            f"{missing_columns}"
+        )
+
+    if order_items_dataframe[
+        ["order_id", "order_item_id"]
+    ].duplicated().any():
+        raise ValueError(
+            "Duplicate order_id + order_item_id combinations found."
+        )
+
+    canonical_order_items = pd.DataFrame(
+        {
+            "order_id": order_items_dataframe["order_id"].copy(),
+            "order_item_id": order_items_dataframe[
+                "order_item_id"
+            ].copy(),
+            "product_id": order_items_dataframe["product_id"].copy(),
+            "seller_id": order_items_dataframe["seller_id"].copy(),
+            "shipping_limit_at": pd.to_datetime(
+                order_items_dataframe["shipping_limit_date"],
+                errors="coerce",
+            ),
+            "price_minor": convert_to_minor_units(
+                order_items_dataframe["price"]
+            ),
+            "freight_value_minor": convert_to_minor_units(
+                order_items_dataframe["freight_value"]
+            ),
+        }
+    )
+
+    return canonical_order_items
