@@ -273,3 +273,60 @@ def build_canonical_order_items(
     )
 
     return canonical_order_items
+
+def build_canonical_order_payments(
+    payments_dataframe: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build the canonical order payments dataset."""
+    required_columns = [
+        "order_id",
+        "payment_sequential",
+        "payment_type",
+        "payment_installments",
+        "payment_value",
+    ]
+
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in payments_dataframe.columns
+    ]
+
+    if missing_columns:
+        raise ValueError(
+            "Missing required payment columns: "
+            f"{missing_columns}"
+        )
+
+    if payments_dataframe.duplicated(
+        ["order_id", "payment_sequential"]
+    ).any():
+        raise ValueError(
+            "Duplicate (order_id, payment_sequential) "
+            "values found."
+        )
+
+    payment_id = (
+        payments_dataframe["order_id"].astype(str)
+        + "_"
+        + payments_dataframe["payment_sequential"].astype(str)
+    )
+
+    canonical_payments = pd.DataFrame(
+        {
+            "payment_id": payment_id,
+            "order_id": payments_dataframe["order_id"].copy(),
+            "payment_sequential": payments_dataframe[
+                "payment_sequential"
+            ].copy(),
+            "payment_type": payments_dataframe["payment_type"].copy(),
+            "payment_installments": payments_dataframe[
+                "payment_installments"
+            ].copy(),
+            "payment_value_minor": convert_to_minor_units(
+                payments_dataframe["payment_value"]
+            ),
+        }
+    )
+
+    return canonical_payments

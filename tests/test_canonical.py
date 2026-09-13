@@ -5,6 +5,7 @@ import pytest
 from bizintel.data.canonical import (
     build_canonical_customers,
     build_canonical_order_items,
+    build_canonical_order_payments,
     build_canonical_orders,
     build_canonical_products,
 )
@@ -652,3 +653,116 @@ def test_build_canonical_order_items_does_not_modify_input() -> None:
     build_canonical_order_items(dataframe)
 
     pd.testing.assert_frame_equal(dataframe, original)
+    
+def test_build_canonical_order_payments_maps_columns():
+    payments = pd.DataFrame(
+        {
+            "order_id": ["order-1", "order-2"],
+            "payment_sequential": [1, 1],
+            "payment_type": ["credit_card", "boleto"],
+            "payment_installments": [2, 1],
+            "payment_value": [100.50, 250.75],
+        }
+    )
+
+    result = build_canonical_order_payments(payments)
+
+    assert list(result.columns) == [
+        "payment_id",
+        "order_id",
+        "payment_sequential",
+        "payment_type",
+        "payment_installments",
+        "payment_value_minor",
+    ]
+
+    assert result["payment_id"].tolist() == [
+        "order-1_1",
+        "order-2_1",
+    ]
+
+
+def test_build_canonical_order_payments_converts_money_to_minor_units():
+    payments = pd.DataFrame(
+        {
+            "order_id": ["order-1", "order-2"],
+            "payment_sequential": [1, 1],
+            "payment_type": ["credit_card", "boleto"],
+            "payment_installments": [2, 1],
+            "payment_value": [100.50, 250.75],
+        }
+    )
+
+    result = build_canonical_order_payments(payments)
+
+    assert result["payment_value_minor"].tolist() == [
+        10050,
+        25075,
+    ]
+
+
+def test_build_canonical_order_payments_creates_unique_payment_id():
+    payments = pd.DataFrame(
+        {
+            "order_id": ["order-1", "order-1"],
+            "payment_sequential": [1, 2],
+            "payment_type": ["credit_card", "voucher"],
+            "payment_installments": [2, 1],
+            "payment_value": [100.50, 50.25],
+        }
+    )
+
+    result = build_canonical_order_payments(payments)
+
+    assert result["payment_id"].is_unique
+    assert result["payment_id"].tolist() == [
+        "order-1_1",
+        "order-1_2",
+    ]
+
+
+def test_build_canonical_order_payments_rejects_duplicate_key():
+    payments = pd.DataFrame(
+        {
+            "order_id": ["order-1", "order-1"],
+            "payment_sequential": [1, 1],
+            "payment_type": ["credit_card", "credit_card"],
+            "payment_installments": [2, 2],
+            "payment_value": [100.50, 100.50],
+        }
+    )
+
+    with pytest.raises(ValueError, match="Duplicate"):
+        build_canonical_order_payments(payments)
+
+
+def test_build_canonical_order_payments_missing_column_raises_error():
+    payments = pd.DataFrame(
+        {
+            "order_id": ["order-1"],
+            "payment_sequential": [1],
+            "payment_type": ["credit_card"],
+            "payment_installments": [2],
+        }
+    )
+
+    with pytest.raises(ValueError, match="Missing required payment columns"):
+        build_canonical_order_payments(payments)
+
+
+def test_build_canonical_order_payments_does_not_modify_input():
+    payments = pd.DataFrame(
+        {
+            "order_id": ["order-1"],
+            "payment_sequential": [1],
+            "payment_type": ["credit_card"],
+            "payment_installments": [2],
+            "payment_value": [100.50],
+        }
+    )
+
+    original = payments.copy(deep=True)
+
+    build_canonical_order_payments(payments)
+
+    pd.testing.assert_frame_equal(payments, original)
