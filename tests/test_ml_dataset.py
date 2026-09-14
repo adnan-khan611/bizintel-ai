@@ -171,6 +171,73 @@ def test_partial_months_can_be_included():
     assert result["revenue"].tolist() == [1000, 2000, 3000]
 
 
+def test_explicit_month_bounds_select_forecasting_window():
+    orders = pd.DataFrame(
+        {
+            "order_id": ["o1", "o2", "o3", "o4"],
+            "order_date": pd.to_datetime(
+                [
+                    "2016-09-04",
+                    "2016-10-10",
+                    "2018-08-15",
+                    "2018-09-10",
+                ]
+            ),
+        }
+    )
+
+    order_items = pd.DataFrame(
+        {
+            "order_id": ["o1", "o2", "o3", "o4"],
+            "price_minor": [1000, 2000, 3000, 4000],
+        }
+    )
+
+    result = build_monthly_revenue_dataset(
+        orders,
+        order_items,
+        include_partial_months=True,
+        start_month="2016-10",
+        end_month="2018-08",
+    )
+
+    assert result["month"].min() == pd.Period(
+        "2016-10",
+        freq="M",
+    )
+    assert result["month"].max() == pd.Period(
+        "2018-08",
+        freq="M",
+    )
+
+
+def test_invalid_month_bounds_raise_error():
+    orders = pd.DataFrame(
+        {
+            "order_id": ["o1"],
+            "order_date": pd.to_datetime(["2024-01-10"]),
+        }
+    )
+
+    order_items = pd.DataFrame(
+        {
+            "order_id": ["o1"],
+            "price_minor": [1000],
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="start_month must be before or equal to end_month",
+    ):
+        build_monthly_revenue_dataset(
+            orders,
+            order_items,
+            start_month="2024-03",
+            end_month="2024-01",
+        )
+
+
 def test_missing_order_column_raises_error():
     orders = pd.DataFrame(
         {

@@ -7,14 +7,19 @@ def build_monthly_revenue_dataset(
     orders: pd.DataFrame,
     order_items: pd.DataFrame,
     include_partial_months: bool = False,
+    start_month: str | None = None,
+    end_month: str | None = None,
 ) -> pd.DataFrame:
     """Build a monthly merchandise revenue dataset for forecasting.
 
     Revenue is calculated from canonical order items and grouped by the
     calendar month of the corresponding order date.
 
-    By default, incomplete boundary months are excluded because they do not
-    represent a complete month's business activity.
+    By default, the first and last observed calendar months are excluded
+    because boundary months may contain partial source-data coverage.
+
+    Optional start_month and end_month parameters allow callers to explicitly
+    select a known complete forecasting window.
     """
     required_order_columns = {"order_id", "order_date"}
     missing_order_columns = required_order_columns - set(orders.columns)
@@ -33,9 +38,36 @@ def build_monthly_revenue_dataset(
     if not pd.api.types.is_datetime64_any_dtype(orders["order_date"]):
         raise TypeError("order_date must be a datetime column")
 
-    data = orders[["order_id", "order_date"]].copy()
+    if start_month is not None:
+        start_period = pd.Period(start_month, freq="M")
+    else:
+        start_period = None
 
+    if end_month is not None:
+        end_period = pd.Period(end_month, freq="M")
+    else:
+        end_period = None
+
+    if start_period is not None and end_period is not None:
+        if start_period > end_period:
+            raise ValueError("start_month must be before or equal to end_month")
+
+    data = orders[["order_id", "order_date"]].copy()
     data["month"] = data["order_date"].dt.to_period("M")
+
+    if start_period is not None:
+        data = data[data["month"] >= start_period]
+
+    if end_period is not None:
+        data = data[data["month"] <= end_period]
+
+    if data.empty:
+        return pd.DataFrame(
+            {
+                "month": pd.PeriodIndex([], freq="M"),
+                "revenue": pd.Series(dtype="int64"),
+            }
+        )
 
     merged = data.merge(
         order_items[["order_id", "price_minor"]],
@@ -48,14 +80,6 @@ def build_monthly_revenue_dataset(
         .sum()
         .rename(columns={"price_minor": "revenue"})
     )
-
-    if monthly_revenue.empty:
-        return pd.DataFrame(
-            {
-                "month": pd.PeriodIndex([], freq="M"),
-                "revenue": pd.Series(dtype="int64"),
-            }
-        )
 
     complete_month_index = pd.period_range(
         start=data["month"].min(),
@@ -73,24 +97,11 @@ def build_monthly_revenue_dataset(
     monthly_revenue["revenue"] = monthly_revenue["revenue"].astype("int64")
 
     if not include_partial_months:
-        first_order_date = data["order_date"].min()
-        last_order_date = data["order_date"].max()
+        first_month = data["month"].min()
+        last_month = data["month"].max()
 
-        first_month = first_order_date.to_period("M")
-        last_month = last_order_date.to_period("M")
-
-        if first_order_date.day != 1:
-            monthly_revenue = monthly_revenue[
-                monthly_revenue["month"] != first_month
-            ]
-
-        last_day_of_month = last_order_date.days_in_month
-
-        if last_order_date.day != last_day_of_month:
-            monthly_revenue = monthly_revenue[
-                monthly_revenue["month"] != last_month
-            ]
-
-        monthly_revenue = monthly_revenue.reset_index(drop=True)
+        monthly_revenue = monthly_revenue[
+            ~monthly_revenue["month"].isin([first_month, last_month])
+        ].reset_index(drop=True)
 
     return monthly_revenue

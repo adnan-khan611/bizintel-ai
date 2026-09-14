@@ -1,4 +1,4 @@
-"""Verify the forecasting dataset against the processed Olist datasets."""
+"""Verify forecasting dataset against the processed Olist datasets."""
 
 from pathlib import Path
 
@@ -23,75 +23,88 @@ def main() -> None:
     monthly_dataset = build_monthly_revenue_dataset(
         orders=orders,
         order_items=order_items,
+        start_month="2016-10",
+        end_month="2018-08",
+        include_partial_months=True,
     )
 
-    print("ML Forecasting Dataset Verification")
-    print("=" * 50)
+    print("ML Dataset Verification")
+    print("=" * 60)
 
-    print("\nSource Data:")
-    print(f"  Orders: {len(orders):,}")
-    print(f"  Order Items: {len(order_items):,}")
-
-    print("\nForecasting Dataset:")
+    print("\nDataset:")
     print(f"  Months: {len(monthly_dataset):,}")
+    print(f"  First Month: {monthly_dataset['month'].min()}")
+    print(f"  Last Month: {monthly_dataset['month'].max()}")
+
+    print("\nRevenue:")
     print(
-        f"  First Complete Month: "
-        f"{monthly_dataset['month'].min()}"
-    )
-    print(
-        f"  Last Complete Month: "
-        f"{monthly_dataset['month'].max()}"
+        f"  Total Revenue: "
+        f"R$ {monthly_dataset['revenue'].sum() / 100:,.2f}"
     )
 
-    print("\nDataset Columns:")
-    for column in monthly_dataset.columns:
-        print(f"  - {column}")
-
-    print("\nMonthly Revenue:")
-    for _, row in monthly_dataset.iterrows():
-        print(
-            f"  {row['month']}: "
-            f"{row['revenue']:,} minor units "
-            f"(R$ {row['revenue'] / 100:,.2f})"
-        )
-
-    print("\nDataset Checks:")
     print(
-        f"  Missing Values: "
-        f"{monthly_dataset.isna().sum().sum()}"
+        f"  Minimum Monthly Revenue: "
+        f"R$ {monthly_dataset['revenue'].min() / 100:,.2f}"
     )
+
+    print(
+        f"  Maximum Monthly Revenue: "
+        f"R$ {monthly_dataset['revenue'].max() / 100:,.2f}"
+    )
+
+    print("\nData Integrity:")
     print(
         f"  Duplicate Months: "
         f"{monthly_dataset['month'].duplicated().sum()}"
     )
+
     print(
-        f"  Zero-Revenue Months: "
-        f"{(monthly_dataset['revenue'] == 0).sum()}"
+        f"  Missing Revenue Values: "
+        f"{monthly_dataset['revenue'].isna().sum()}"
     )
+
     print(
         f"  Revenue Data Type: "
         f"{monthly_dataset['revenue'].dtype}"
     )
 
+    print(
+        f"  Chronologically Sorted: "
+        f"{monthly_dataset['month'].is_monotonic_increasing}"
+    )
+
     expected_months = pd.period_range(
-        start=monthly_dataset["month"].min(),
-        end=monthly_dataset["month"].max(),
+        start="2016-10",
+        end="2018-08",
         freq="M",
     )
 
-    expected_months_series = pd.Series(
-        expected_months,
-        name="month",
-    ).reset_index(drop=True)
+    print(
+        f"  Continuous Months: "
+        f"{monthly_dataset['month'].tolist() == expected_months.tolist()}"
+    )
 
-    actual_months_series = monthly_dataset["month"].reset_index(
-        drop=True
+    print("\nBoundary Checks:")
+    print(
+        f"  Contains 2016-09: "
+        f"{pd.Period('2016-09', freq='M') in monthly_dataset['month'].values}"
     )
 
     print(
-        f"  Continuous Calendar Months: "
-        f"{actual_months_series.equals(expected_months_series)}"
+        f"  Contains 2018-09: "
+        f"{pd.Period('2018-09', freq='M') in monthly_dataset['month'].values}"
     )
+
+    print(
+        f"  Contains 2018-10: "
+        f"{pd.Period('2018-10', freq='M') in monthly_dataset['month'].values}"
+    )
+
+    print("\nDataset Preview:")
+    print(monthly_dataset.head().to_string(index=False))
+
+    print("\nDataset Tail:")
+    print(monthly_dataset.tail().to_string(index=False))
 
 
 if __name__ == "__main__":
