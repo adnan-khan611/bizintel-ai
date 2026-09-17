@@ -5,6 +5,10 @@ from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from bizintel.ml.contracts import (
+    get_feature_matrix,
+    validate_inference_features,
+)
 from bizintel.ml.features import FEATURE_COLUMNS
 
 
@@ -30,7 +34,7 @@ def train_ridge_model(
     if data.empty:
         raise ValueError("No complete rows available for model training")
 
-    X = data[FEATURE_COLUMNS]
+    X = get_feature_matrix(data)
     y = data["revenue"]
 
     model = Pipeline(
@@ -50,22 +54,9 @@ def predict_ridge_model(
     forecasting_dataset: pd.DataFrame,
 ) -> pd.Series:
     """Generate revenue predictions using a trained Ridge model."""
-    missing_columns = set(FEATURE_COLUMNS) - set(
-        forecasting_dataset.columns
-    )
+    validate_inference_features(forecasting_dataset)
 
-    if missing_columns:
-        missing = ", ".join(sorted(missing_columns))
-        raise ValueError(f"Missing required columns: {missing}")
-
-    data = forecasting_dataset.copy()
-
-    if data[FEATURE_COLUMNS].isna().any().any():
-        raise ValueError(
-            "Forecasting features contain missing values"
-        )
-
-    X = data[FEATURE_COLUMNS]
+    X = get_feature_matrix(forecasting_dataset)
     predictions = model.predict(X)
 
     return pd.Series(
