@@ -1,7 +1,10 @@
 import pandas as pd
 import pytest
 
-from bizintel.data.parquet import write_parquet_file
+from bizintel.data.parquet import (
+    read_parquet_file,
+    write_parquet_file,
+)
 
 
 def test_write_parquet_file_creates_file(tmp_path):
@@ -14,7 +17,10 @@ def test_write_parquet_file_creates_file(tmp_path):
 
     output_path = tmp_path / "customers.parquet"
 
-    write_parquet_file(dataframe, output_path)
+    write_parquet_file(
+        dataframe,
+        output_path,
+    )
 
     assert output_path.exists()
 
@@ -29,7 +35,10 @@ def test_write_parquet_file_preserves_data(tmp_path):
 
     output_path = tmp_path / "customers.parquet"
 
-    write_parquet_file(dataframe, output_path)
+    write_parquet_file(
+        dataframe,
+        output_path,
+    )
 
     loaded_dataframe = pd.read_parquet(
         output_path,
@@ -56,7 +65,10 @@ def test_write_parquet_file_creates_parent_directory(tmp_path):
         / "data.parquet"
     )
 
-    write_parquet_file(dataframe, output_path)
+    write_parquet_file(
+        dataframe,
+        output_path,
+    )
 
     assert output_path.exists()
 
@@ -70,5 +82,61 @@ def test_write_parquet_file_rejects_non_parquet_path(tmp_path):
 
     output_path = tmp_path / "data.csv"
 
-    with pytest.raises(ValueError, match="Expected a Parquet file"):
-        write_parquet_file(dataframe, output_path)
+    with pytest.raises(
+        ValueError,
+        match="Expected a Parquet file",
+    ):
+        write_parquet_file(
+            dataframe,
+            output_path,
+        )
+
+
+def test_read_parquet_file_preserves_data(tmp_path):
+    dataframe = pd.DataFrame(
+        {
+            "customer_id": ["C001", "C002"],
+            "customer_state": ["SP", "RJ"],
+        }
+    )
+
+    input_path = tmp_path / "customers.parquet"
+
+    dataframe.to_parquet(
+        input_path,
+        engine="pyarrow",
+        index=False,
+    )
+
+    loaded_dataframe = read_parquet_file(
+        input_path,
+    )
+
+    pd.testing.assert_frame_equal(
+        dataframe,
+        loaded_dataframe,
+    )
+
+
+def test_read_parquet_file_rejects_missing_file(tmp_path):
+    input_path = tmp_path / "missing.parquet"
+
+    with pytest.raises(
+        FileNotFoundError,
+        match="Parquet file not found",
+    ):
+        read_parquet_file(
+            input_path,
+        )
+
+
+def test_read_parquet_file_rejects_non_parquet_path(tmp_path):
+    input_path = tmp_path / "customers.csv"
+
+    with pytest.raises(
+        ValueError,
+        match="Expected a Parquet file",
+    ):
+        read_parquet_file(
+            input_path,
+        )

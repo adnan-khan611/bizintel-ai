@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from os import getenv
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -10,6 +11,7 @@ class Settings:
 
     app_name: str = ""
     environment: str = ""
+    processed_data_dir: Path = Path("data/processed")
 
     forecasting_model_version: str = ""
     forecasting_ridge_alpha: float = 0.0
@@ -26,6 +28,16 @@ class Settings:
             self,
             "environment",
             getenv("APP_ENV", "development"),
+        )
+        object.__setattr__(
+            self,
+            "processed_data_dir",
+            Path(
+                getenv(
+                    "PROCESSED_DATA_DIR",
+                    "data/processed",
+                )
+            ),
         )
         object.__setattr__(
             self,
