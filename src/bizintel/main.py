@@ -6,8 +6,10 @@ from bizintel.api.analytics_schemas import AnalyticsSummaryResponse
 from bizintel.api.analytics_service import get_analytics_summary
 from bizintel.api.customers_schemas import CustomersResponse
 from bizintel.api.customers_service import get_customers_analytics
+from bizintel.api.exceptions import APIError
 from bizintel.api.growth_schemas import GrowthResponse
 from bizintel.api.growth_service import get_growth_analytics
+from bizintel.api.handlers import api_error_handler
 from bizintel.api.orders_schemas import OrdersResponse
 from bizintel.api.orders_service import get_orders_analytics
 from bizintel.api.products_schemas import ProductsResponse
@@ -21,6 +23,11 @@ from bizintel.config import settings
 def create_app() -> FastAPI:
     """Create and configure the BizIntel AI API application."""
     app = FastAPI(title=settings.app_name)
+
+    app.add_exception_handler(
+        APIError,
+        api_error_handler,
+    )
 
     @app.get(
         "/health",
