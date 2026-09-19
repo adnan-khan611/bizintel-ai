@@ -7,6 +7,8 @@ from bizintel.api.analytics_service import get_analytics_summary
 from bizintel.api.customers_schemas import CustomersResponse
 from bizintel.api.customers_service import get_customers_analytics
 from bizintel.api.exceptions import APIError
+from bizintel.api.forecasting_schemas import ForecastResponse
+from bizintel.api.forecasting_service import get_forecast
 from bizintel.api.growth_schemas import GrowthResponse
 from bizintel.api.growth_service import get_growth_analytics
 from bizintel.api.handlers import api_error_handler
@@ -98,6 +100,16 @@ def create_app() -> FastAPI:
     def analytics_growth() -> GrowthResponse:
         """Return growth analytics."""
         return get_growth_analytics(
+            settings.processed_data_dir
+        )
+
+    @app.get(
+        "/analytics/forecast",
+        response_model=ForecastResponse,
+    )
+    def analytics_forecast() -> ForecastResponse:
+        """Return the next-month revenue forecast."""
+        return get_forecast(
             settings.processed_data_dir
         )
 
